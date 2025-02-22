@@ -7,8 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, Plus, X } from "lucide-react";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Loader2, AlertTriangle, Plus, X, Trash2 } from "lucide-react";
 import { MedicalDisclaimer } from "@/components/ui/medical-disclaimer";
+import { useToast } from "@/hooks/use-toast";
 
 type SymptomAnalysis = {
   conditions: Array<{
@@ -22,11 +33,13 @@ type SymptomAnalysis = {
 
 export default function SymptomChecker() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [currentSymptom, setCurrentSymptom] = useState("");
+  const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
   // Get the user's previous symptom logs
-  const { data: previousSymptoms } = useQuery({
+  const { data: previousSymptoms, refetch: refetchSymptoms } = useQuery({
     queryKey: ["/api/symptoms", user?.id],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/symptoms?userId=${user?.id}`);
@@ -37,32 +50,69 @@ export default function SymptomChecker() {
 
   const analyzeSymptoms = useMutation({
     mutationFn: async (symptoms: string[]) => {
-      const res = await apiRequest("POST", "/api/symptoms/analyze", { 
-        symptoms,
-        userProfile: {
-          age: user ? Math.floor((new Date().getTime() - new Date(user.dateOfBirth).getTime()) / 31536000000) : undefined,
-          gender: user?.gender,
-          medicalHistory: user?.medicalHistory,
-          familyHistory: user?.familyHistory,
-          lifestyle: user?.lifestyle
-        }
-      });
-
-      // Save the analysis to health logs
-      await apiRequest("POST", "/api/health-logs", {
-        userId: user?.id,
-        type: "symptom",
-        data: {
+      try {
+        const res = await apiRequest("POST", "/api/symptoms/analyze", { 
           symptoms,
-          analysis: await res.json()
-        },
-        createdAt: new Date().toISOString()
-      });
+          userProfile: {
+            age: user ? Math.floor((new Date().getTime() - new Date(user.dateOfBirth).getTime()) / 31536000000) : undefined,
+            gender: user?.gender,
+            medicalHistory: user?.medicalHistory,
+            familyHistory: user?.familyHistory,
+            lifestyle: user?.lifestyle
+          }
+        });
 
-      return res.json() as Promise<SymptomAnalysis>;
+        const analysis = await res.json();
+
+        if (analysis.error) {
+          throw new Error(analysis.error);
+        }
+
+        // Save the analysis to health logs
+        await apiRequest("POST", "/api/health-logs", {
+          userId: user?.id,
+          type: "symptom",
+          data: {
+            symptoms,
+            analysis
+          },
+          createdAt: new Date().toISOString()
+        });
+
+        return analysis as SymptomAnalysis;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to analyze symptoms";
+        toast({
+          title: "Analysis Failed",
+          description: message,
+          variant: "destructive"
+        });
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/symptoms"] });
+    }
+  });
+
+  const clearHistory = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/symptoms?userId=${user?.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/symptoms"] });
+      toast({
+        title: "History Cleared",
+        description: "Your symptom history has been cleared successfully."
+      });
+      setShowClearHistoryDialog(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to clear symptom history. Please try again.",
+        variant: "destructive"
+      });
     }
   });
 
@@ -77,11 +127,39 @@ export default function SymptomChecker() {
     setSymptoms(symptoms.filter(s => s !== symptom));
   };
 
+  const clearCurrentSymptoms = () => {
+    setSymptoms([]);
+    toast({
+      title: "Symptoms Cleared",
+      description: "Current symptoms have been cleared. Your history remains intact."
+    });
+  };
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Symptom Checker</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            <span>Symptom Checker</span>
+            <div className="flex gap-2">
+              {symptoms.length > 0 && (
+                <Button 
+                  variant="outline"
+                  onClick={clearCurrentSymptoms}
+                >
+                  Clear Current
+                </Button>
+              )}
+              {previousSymptoms?.length > 0 && (
+                <Button 
+                  variant="destructive"
+                  onClick={() => setShowClearHistoryDialog(true)}
+                >
+                  Clear History
+                </Button>
+              )}
+            </div>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -185,6 +263,18 @@ export default function SymptomChecker() {
                         <Badge key={j} variant="outline">{symptom}</Badge>
                       ))}
                     </div>
+                    {log.data.analysis && (
+                      <div className="mt-2">
+                        <p className="font-medium">Analysis Results:</p>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {log.data.analysis.conditions.map((condition: any) => (
+                            <p key={condition.name}>
+                              {condition.name} - {Math.round(condition.confidence * 100)}% confidence
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -192,6 +282,30 @@ export default function SymptomChecker() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={showClearHistoryDialog} onOpenChange={setShowClearHistoryDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Symptom History</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will permanently delete your entire symptom check history. This data is used to track your health patterns over time and removing it may affect future analyses. Are you sure you want to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => clearHistory.mutate()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {clearHistory.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Clear History"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
