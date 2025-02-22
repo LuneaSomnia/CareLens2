@@ -9,9 +9,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Redirect } from "wouter";
 import { Heart, User } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
+  const { toast } = useToast();
 
   const loginForm = useForm<InsertUser>({
     resolver: zodResolver(insertUserSchema),
@@ -22,6 +24,43 @@ export default function AuthPage() {
     resolver: zodResolver(insertUserSchema),
     defaultValues: { username: "", password: "" }
   });
+
+  const handleRegister = async (data: InsertUser) => {
+    try {
+      await registerMutation.mutateAsync(data);
+      toast({
+        title: "Account created successfully",
+        description: "Welcome to CareLens! Please complete your health profile.",
+      });
+    } catch (error) {
+      // The error message comes from the server's response
+      toast({
+        title: "Registration failed",
+        description: error instanceof Error ? error.message : "Username already exists",
+        variant: "destructive",
+      });
+      registerForm.setError("username", {
+        type: "manual",
+        message: "Username already exists"
+      });
+    }
+  };
+
+  const handleLogin = async (data: InsertUser) => {
+    try {
+      await loginMutation.mutateAsync(data);
+      toast({
+        title: "Welcome back",
+        description: "Successfully logged in to CareLens",
+      });
+    } catch (error) {
+      toast({
+        title: "Login failed",
+        description: "Invalid username or password",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (user) {
     return <Redirect to="/" />;
@@ -45,7 +84,7 @@ export default function AuthPage() {
 
             <TabsContent value="login">
               <Form {...loginForm}>
-                <form onSubmit={loginForm.handleSubmit((data) => loginMutation.mutate(data))}
+                <form onSubmit={loginForm.handleSubmit(handleLogin)}
                       className="space-y-4">
                   <FormField
                     control={loginForm.control}
@@ -89,7 +128,7 @@ export default function AuthPage() {
 
             <TabsContent value="register">
               <Form {...registerForm}>
-                <form onSubmit={registerForm.handleSubmit((data) => registerMutation.mutate(data))}
+                <form onSubmit={registerForm.handleSubmit(handleRegister)}
                       className="space-y-4">
                   <FormField
                     control={registerForm.control}
