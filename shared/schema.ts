@@ -38,7 +38,18 @@ export const healthLogs = pgTable("health_logs", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   type: text("type").notNull(), // 'symptom', 'lifestyle', 'assessment'
-  data: json("data").notNull(),
+  data: json("data").$type<{
+    symptoms?: string[];
+    analysis?: {
+      conditions: Array<{
+        name: string;
+        confidence: number;
+        severity: 'low' | 'medium' | 'high';
+      }>;
+      recommendations: string[];
+      emergencyWarning?: string;
+    };
+  }>().notNull(),
   createdAt: date("created_at").notNull(),
 });
 
