@@ -7,7 +7,22 @@ if (!process.env.OPENAI_API_KEY) {
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024
 export const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function analyzeSymptoms(symptoms: string[]) {
+export async function analyzeSymptoms(symptoms: string[], userProfile?: {
+  age?: number;
+  gender?: string;
+  medicalHistory?: string[];
+  familyHistory?: string[];
+  lifestyle?: {
+    smoking: boolean;
+    alcohol: boolean;
+    diet: string[];
+    exercise: {
+      type: string;
+      frequency: string;
+      duration: string;
+    };
+  };
+}) {
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -18,7 +33,19 @@ export async function analyzeSymptoms(symptoms: string[]) {
         },
         {
           role: "user",
-          content: `Analyze these symptoms: ${symptoms.join(", ")}`
+          content: `Analyze these symptoms: ${symptoms.join(", ")}
+          ${userProfile ? `
+          Consider the following patient information:
+          - Age: ${userProfile.age || 'Not provided'}
+          - Gender: ${userProfile.gender || 'Not provided'}
+          - Medical History: ${userProfile.medicalHistory?.join(", ") || 'None'}
+          - Family History: ${userProfile.familyHistory?.join(", ") || 'None'}
+          - Lifestyle:
+            * Smoking: ${userProfile.lifestyle?.smoking ? 'Yes' : 'No'}
+            * Alcohol: ${userProfile.lifestyle?.alcohol ? 'Yes' : 'No'}
+            * Diet: ${userProfile.lifestyle?.diet?.join(", ") || 'Not specified'}
+            * Exercise: ${userProfile.lifestyle?.exercise.type} ${userProfile.lifestyle?.exercise.frequency} ${userProfile.lifestyle?.exercise.duration}
+          ` : ''}`
         }
       ],
       response_format: { type: "json_object" }

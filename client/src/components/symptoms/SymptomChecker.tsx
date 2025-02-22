@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertTriangle, Plus, X } from "lucide-react";
+import { MedicalDisclaimer } from "@/components/ui/medical-disclaimer";
 
 type SymptomAnalysis = {
   conditions: Array<{
@@ -19,13 +21,48 @@ type SymptomAnalysis = {
 };
 
 export default function SymptomChecker() {
+  const { user } = useAuth();
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [currentSymptom, setCurrentSymptom] = useState("");
 
+  // Get the user's previous symptom logs
+  const { data: previousSymptoms } = useQuery({
+    queryKey: ["/api/symptoms", user?.id],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/symptoms?userId=${user?.id}`);
+      return res.json();
+    },
+    enabled: !!user?.id
+  });
+
   const analyzeSymptoms = useMutation({
     mutationFn: async (symptoms: string[]) => {
-      const res = await apiRequest("POST", "/api/symptoms/analyze", { symptoms });
+      const res = await apiRequest("POST", "/api/symptoms/analyze", { 
+        symptoms,
+        userProfile: {
+          age: user ? Math.floor((new Date().getTime() - new Date(user.dateOfBirth).getTime()) / 31536000000) : undefined,
+          gender: user?.gender,
+          medicalHistory: user?.medicalHistory,
+          familyHistory: user?.familyHistory,
+          lifestyle: user?.lifestyle
+        }
+      });
+
+      // Save the analysis to health logs
+      await apiRequest("POST", "/api/health-logs", {
+        userId: user?.id,
+        type: "symptom",
+        data: {
+          symptoms,
+          analysis: await res.json()
+        },
+        createdAt: new Date().toISOString()
+      });
+
       return res.json() as Promise<SymptomAnalysis>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/symptoms"] });
     }
   });
 
@@ -128,6 +165,28 @@ export default function SymptomChecker() {
                     <li key={i}>{rec}</li>
                   ))}
                 </ul>
+              </div>
+
+              <MedicalDisclaimer />
+            </div>
+          )}
+
+          {previousSymptoms && previousSymptoms.length > 0 && (
+            <div className="mt-6 space-y-2">
+              <h3 className="text-lg font-semibold">Previous Symptom Checks</h3>
+              <div className="space-y-2">
+                {previousSymptoms.map((log: any, i: number) => (
+                  <div key={i} className="p-4 border rounded-lg space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(log.createdAt).toLocaleDateString()}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {log.data.symptoms.map((symptom: string, j: number) => (
+                        <Badge key={j} variant="outline">{symptom}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
