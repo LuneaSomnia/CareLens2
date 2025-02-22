@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { userProfileSchema, type UserProfile } from "@shared/schema";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { AlertCircle, Plus, X } from "lucide-react";
+import { AlertCircle, Plus, X, Loader2 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -26,13 +26,13 @@ export default function UserProfile() {
     phone: ""
   });
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading } = useQuery({
     queryKey: ["/api/profile"],
   });
 
   const form = useForm<UserProfile>({
     resolver: zodResolver(userProfileSchema),
-    defaultValues: profile || {
+    defaultValues: {
       fullName: "",
       dateOfBirth: new Date().toISOString().split('T')[0],
       gender: "",
@@ -57,6 +57,13 @@ export default function UserProfile() {
       dataSharing: false
     }
   });
+
+  // Reset form when profile data is loaded
+  useEffect(() => {
+    if (profile) {
+      form.reset(profile);
+    }
+  }, [profile, form]);
 
   const updateProfile = useMutation({
     mutationFn: async (data: UserProfile) => {
@@ -107,6 +114,14 @@ export default function UserProfile() {
     form.setValue("emergencyContacts", [...current, { ...currentEmergencyContact }]);
     setCurrentEmergencyContact({ name: "", email: "", phone: "" });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[200px]">
+        <Loader2 className="h-8 w-8 animate-spin text-border" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -165,9 +180,9 @@ export default function UserProfile() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Gender</FormLabel>
-                        <Select 
-                          disabled={!isEditing} 
-                          onValueChange={field.onChange} 
+                        <Select
+                          disabled={!isEditing}
+                          onValueChange={field.onChange}
                           value={field.value}
                         >
                           <FormControl>
@@ -239,9 +254,9 @@ export default function UserProfile() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Blood Type</FormLabel>
-                        <Select 
-                          disabled={!isEditing} 
-                          onValueChange={field.onChange} 
+                        <Select
+                          disabled={!isEditing}
+                          onValueChange={field.onChange}
                           value={field.value || ""}
                         >
                           <FormControl>
@@ -429,9 +444,9 @@ export default function UserProfile() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Exercise Type</FormLabel>
-                          <Select 
-                            disabled={!isEditing} 
-                            onValueChange={field.onChange} 
+                          <Select
+                            disabled={!isEditing}
+                            onValueChange={field.onChange}
                             value={field.value}
                           >
                             <FormControl>
@@ -457,9 +472,9 @@ export default function UserProfile() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Exercise Frequency</FormLabel>
-                          <Select 
-                            disabled={!isEditing} 
-                            onValueChange={field.onChange} 
+                          <Select
+                            disabled={!isEditing}
+                            onValueChange={field.onChange}
                             value={field.value}
                           >
                             <FormControl>
@@ -484,9 +499,9 @@ export default function UserProfile() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Exercise Duration</FormLabel>
-                          <Select 
-                            disabled={!isEditing} 
-                            onValueChange={field.onChange} 
+                          <Select
+                            disabled={!isEditing}
+                            onValueChange={field.onChange}
                             value={field.value}
                           >
                             <FormControl>
