@@ -1,8 +1,12 @@
 import { User, InsertUser, UserProfile, HealthLog } from "@shared/schema";
+import { users, healthLogs } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -14,35 +18,29 @@ export interface IStorage {
   sessionStore: session.Store;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private healthLogs: Map<number, HealthLog>;
-  currentId: number;
+export class DatabaseStorage implements IStorage {
   sessionStore: session.Store;
 
   constructor() {
-    this.users = new Map();
-    this.healthLogs = new Map();
-    this.currentId = 1;
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000,
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
     });
   }
 
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentId++;
-    const user: User = {
-      id,
+    // Add default values for required fields
+    const userWithDefaults = {
       ...insertUser,
       fullName: "",
       dateOfBirth: new Date(),
@@ -67,31 +65,47 @@ export class MemStorage implements IStorage {
       organDonor: false,
       dataSharing: false
     };
-    this.users.set(id, user);
+
+    const [user] = await db
+      .insert(users)
+      .values(userWithDefaults)
+      .returning();
     return user;
   }
 
   async updateUser(id: number, profile: UserProfile): Promise<User> {
-    const user = await this.getUser(id);
-    if (!user) throw new Error("User not found");
+    const [user] = await db
+      .update(users)
+      .set({
+        ...profile,
+        lifestyle: {
+          smoking: profile.lifestyle.smoking,
+          alcohol: profile.lifestyle.alcohol,
+          diet: profile.lifestyle.diet,
+          exercise: profile.lifestyle.exercise
+        }
+      })
+      .where(eq(users.id, id))
+      .returning();
 
-    const updatedUser = { ...user, ...profile };
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    if (!user) throw new Error("User not found");
+    return user;
   }
 
   async createHealthLog(log: Omit<HealthLog, "id">): Promise<HealthLog> {
-    const id = this.currentId++;
-    const healthLog = { ...log, id };
-    this.healthLogs.set(id, healthLog);
+    const [healthLog] = await db
+      .insert(healthLogs)
+      .values(log)
+      .returning();
     return healthLog;
   }
 
   async getUserHealthLogs(userId: number): Promise<HealthLog[]> {
-    return Array.from(this.healthLogs.values()).filter(
-      (log) => log.userId === userId
-    );
+    return db
+      .select()
+      .from(healthLogs)
+      .where(eq(healthLogs.userId, userId));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
