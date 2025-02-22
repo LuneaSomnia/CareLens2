@@ -76,7 +76,7 @@ export default function RiskAssessment() {
                             <Progress
                               value={risk.risk}
                               className="w-24 h-2 mr-2"
-                              indicatorClassName={
+                              indicator={
                                 risk.risk > 70 ? "bg-destructive" :
                                 risk.risk > 40 ? "bg-orange-500" :
                                 "bg-green-500"

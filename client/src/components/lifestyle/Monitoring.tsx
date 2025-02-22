@@ -31,31 +31,57 @@ type LifestyleLog = {
   stress: number;
 };
 
+const defaultLifestyleLog: LifestyleLog = {
+  date: new Date().toISOString().split('T')[0],
+  diet: {
+    meals: [],
+    calories: 0,
+    water: 0
+  },
+  activity: {
+    steps: 0,
+    exercise: []
+  },
+  sleep: {
+    hours: 0,
+    quality: 0
+  },
+  stress: 0
+};
+
 export default function Monitoring() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentMeal, setCurrentMeal] = useState("");
 
   const { data: lifestyleLog, isLoading } = useQuery<LifestyleLog>({
     queryKey: ["/api/lifestyle", selectedDate],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/lifestyle?date=${selectedDate}`);
+      const data = await response.json();
+      return data || defaultLifestyleLog;
+    }
   });
 
   const logLifestyle = useMutation({
     mutationFn: async (data: Partial<LifestyleLog>) => {
-      const res = await apiRequest("POST", "/api/lifestyle", { ...data, date: selectedDate });
+      const res = await apiRequest("POST", "/api/lifestyle", {
+        ...data,
+        date: selectedDate
+      });
       return res.json();
     }
   });
 
   const addMeal = () => {
-    if (!currentMeal.trim()) return;
-    
+    if (!currentMeal.trim() || !lifestyleLog) return;
+
     logLifestyle.mutate({
       diet: {
-        ...lifestyleLog?.diet,
-        meals: [...(lifestyleLog?.diet.meals || []), currentMeal.trim()]
+        ...lifestyleLog.diet,
+        meals: [...lifestyleLog.diet.meals, currentMeal.trim()]
       }
     });
-    
+
     setCurrentMeal("");
   };
 
@@ -65,6 +91,10 @@ export default function Monitoring() {
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
+  }
+
+  if (!lifestyleLog) {
+    return null;
   }
 
   return (
@@ -98,7 +128,7 @@ export default function Monitoring() {
               </div>
 
               <div className="space-y-2">
-                {lifestyleLog?.diet.meals.map((meal, i) => (
+                {lifestyleLog.diet.meals.map((meal, i) => (
                   <Badge key={i} variant="secondary">{meal}</Badge>
                 ))}
               </div>
@@ -106,9 +136,9 @@ export default function Monitoring() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Water Intake</span>
-                  <span>{lifestyleLog?.diet.water || 0}L / 2.5L</span>
+                  <span>{lifestyleLog.diet.water}L / 2.5L</span>
                 </div>
-                <Progress value={(lifestyleLog?.diet.water || 0) / 2.5 * 100} />
+                <Progress value={(lifestyleLog.diet.water / 2.5) * 100} />
               </div>
             </div>
           </CardContent>
@@ -126,13 +156,13 @@ export default function Monitoring() {
               <div className="flex justify-between items-center">
                 <span>Daily Steps</span>
                 <span className="text-2xl font-bold">
-                  {lifestyleLog?.activity.steps.toLocaleString()}
+                  {lifestyleLog.activity.steps.toLocaleString()}
                 </span>
               </div>
 
               <div className="space-y-2">
                 <h4 className="font-medium">Exercise Log</h4>
-                {lifestyleLog?.activity.exercise.map((exercise, i) => (
+                {lifestyleLog.activity.exercise.map((exercise, i) => (
                   <div key={i} className="flex justify-between text-sm">
                     <span>{exercise.type}</span>
                     <span>{exercise.duration} mins</span>
@@ -155,31 +185,28 @@ export default function Monitoring() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Sleep Duration</span>
-                  <span>{lifestyleLog?.sleep.hours || 0} hours</span>
+                  <span>{lifestyleLog.sleep.hours} hours</span>
                 </div>
-                <Progress value={(lifestyleLog?.sleep.hours || 0) / 9 * 100} />
+                <Progress value={(lifestyleLog.sleep.hours / 9) * 100} />
               </div>
 
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Sleep Quality</span>
-                  <span>{lifestyleLog?.sleep.quality || 0}/10</span>
+                  <span>{lifestyleLog.sleep.quality}/10</span>
                 </div>
-                <Progress value={(lifestyleLog?.sleep.quality || 0) * 10} />
+                <Progress value={lifestyleLog.sleep.quality * 10} />
               </div>
 
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Stress Level</span>
-                  <span>{lifestyleLog?.stress || 0}/10</span>
+                  <span>{lifestyleLog.stress}/10</span>
                 </div>
-                <Progress
-                  value={(lifestyleLog?.stress || 0) * 10}
-                  className={lifestyleLog?.stress && lifestyleLog.stress > 7 ? "bg-destructive" : ""}
-                />
+                <Progress value={lifestyleLog.stress * 10} className={lifestyleLog.stress > 7 ? "bg-destructive" : ""} />
               </div>
 
-              {lifestyleLog?.stress && lifestyleLog.stress > 7 && (
+              {lifestyleLog.stress > 7 && (
                 <Alert>
                   <AlertDescription>
                     Your stress levels are high. Consider taking a break or trying some relaxation techniques.

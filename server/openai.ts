@@ -14,7 +14,7 @@ export async function analyzeSymptoms(symptoms: string[]) {
       messages: [
         {
           role: "system",
-          content: "You are a medical assistant. Analyze symptoms and provide potential conditions and recommendations in JSON format."
+          content: "You are a medical assistant. Analyze symptoms and provide potential conditions and recommendations in JSON format with the following structure: { conditions: [{ name: string, confidence: number, severity: 'low' | 'medium' | 'high' }], recommendations: string[], emergencyWarning?: string }"
         },
         {
           role: "user",
@@ -24,9 +24,16 @@ export async function analyzeSymptoms(symptoms: string[]) {
       response_format: { type: "json_object" }
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    // Ensure response.choices[0].message.content is not null before parsing
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No response content from OpenAI");
+    }
+
+    return JSON.parse(content);
   } catch (error) {
-    throw new Error("Failed to analyze symptoms: " + error.message);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    throw new Error("Failed to analyze symptoms: " + errorMessage);
   }
 }
 
@@ -37,7 +44,7 @@ export async function assessHealthRisks(profile: any) {
       messages: [
         {
           role: "system",
-          content: "You are a health risk assessment expert. Analyze the health profile and provide risk assessment in JSON format."
+          content: "You are a health risk assessment expert. Analyze the health profile and provide risk assessment in JSON format with the following structure: { riskFactors: [{ condition: string, risk: number, factors: string[], recommendations: string[] }], overallHealth: { score: number, summary: string } }"
         },
         {
           role: "user",
@@ -47,8 +54,14 @@ export async function assessHealthRisks(profile: any) {
       response_format: { type: "json_object" }
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No response content from OpenAI");
+    }
+
+    return JSON.parse(content);
   } catch (error) {
-    throw new Error("Failed to assess health risks: " + error.message);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    throw new Error("Failed to assess health risks: " + errorMessage);
   }
 }
