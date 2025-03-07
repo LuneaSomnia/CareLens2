@@ -17,9 +17,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, AlertTriangle, Plus, X, Trash2 } from "lucide-react";
 import { MedicalDisclaimer } from "@/components/ui/medical-disclaimer";
 import { useToast } from "@/hooks/use-toast";
+
+type Symptom = {
+  name: string;
+  severity: "mild" | "moderate" | "severe";
+  duration: string;
+  frequency: "rarely" | "sometimes" | "often" | "constant";
+};
 
 type SymptomAnalysis = {
   conditions: Array<{
@@ -34,8 +42,11 @@ type SymptomAnalysis = {
 export default function SymptomChecker() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [symptoms, setSymptoms] = useState<string[]>([]);
+  const [symptoms, setSymptoms] = useState<Symptom[]>([]);
   const [currentSymptom, setCurrentSymptom] = useState("");
+  const [currentSeverity, setCurrentSeverity] = useState<"mild" | "moderate" | "severe">("moderate");
+  const [currentDuration, setCurrentDuration] = useState("");
+  const [currentFrequency, setCurrentFrequency] = useState<"rarely" | "sometimes" | "often" | "constant">("sometimes");
   const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
   // Get the user's previous symptom logs
@@ -49,7 +60,7 @@ export default function SymptomChecker() {
   });
 
   const analyzeSymptoms = useMutation({
-    mutationFn: async (symptoms: string[]) => {
+    mutationFn: async (symptoms: Symptom[]) => {
       try {
         const res = await apiRequest("POST", "/api/symptoms/analyze", { 
           symptoms,
@@ -117,14 +128,22 @@ export default function SymptomChecker() {
   });
 
   const addSymptom = () => {
-    if (currentSymptom.trim() && !symptoms.includes(currentSymptom.trim())) {
-      setSymptoms([...symptoms, currentSymptom.trim()]);
+    if (currentSymptom.trim() && !symptoms.find(s => s.name === currentSymptom.trim())) {
+      setSymptoms([...symptoms, {
+        name: currentSymptom.trim(),
+        severity: currentSeverity,
+        duration: currentDuration,
+        frequency: currentFrequency
+      }]);
       setCurrentSymptom("");
+      setCurrentDuration("");
+      setCurrentSeverity("moderate");
+      setCurrentFrequency("sometimes");
     }
   };
 
-  const removeSymptom = (symptom: string) => {
-    setSymptoms(symptoms.filter(s => s !== symptom));
+  const removeSymptom = (symptomName: string) => {
+    setSymptoms(symptoms.filter(s => s.name !== symptomName));
   };
 
   const clearCurrentSymptoms = () => {
@@ -163,30 +182,82 @@ export default function SymptomChecker() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
               <Input
                 value={currentSymptom}
                 onChange={(e) => setCurrentSymptom(e.target.value)}
                 placeholder="Enter a symptom"
                 onKeyPress={(e) => e.key === 'Enter' && addSymptom()}
               />
-              <Button onClick={addSymptom} disabled={!currentSymptom.trim()}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add
-              </Button>
+              <Select
+                value={currentSeverity}
+                onValueChange={(value: "mild" | "moderate" | "severe") => setCurrentSeverity(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Severity" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mild">Mild</SelectItem>
+                  <SelectItem value="moderate">Moderate</SelectItem>
+                  <SelectItem value="severe">Severe</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                value={currentDuration}
+                onChange={(e) => setCurrentDuration(e.target.value)}
+                placeholder="Duration (e.g., 2 days)"
+              />
+              <Select
+                value={currentFrequency}
+                onValueChange={(value: "rarely" | "sometimes" | "often" | "constant") => setCurrentFrequency(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Frequency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rarely">Rarely</SelectItem>
+                  <SelectItem value="sometimes">Sometimes</SelectItem>
+                  <SelectItem value="often">Often</SelectItem>
+                  <SelectItem value="constant">Constant</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            <Button onClick={addSymptom} disabled={!currentSymptom.trim()} className="w-full">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Symptom
+            </Button>
 
             <div className="flex flex-wrap gap-2">
               {symptoms.map((symptom) => (
-                <Badge key={symptom} variant="secondary" className="flex items-center gap-1">
-                  {symptom}
+                <Badge 
+                  key={symptom.name} 
+                  variant="secondary" 
+                  className="flex items-center gap-1 p-2"
+                >
+                  <span>{symptom.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({symptom.severity}, {symptom.duration}, {symptom.frequency})
+                  </span>
                   <X
-                    className="w-3 h-3 cursor-pointer"
-                    onClick={() => removeSymptom(symptom)}
+                    className="w-3 h-3 cursor-pointer ml-2"
+                    onClick={() => removeSymptom(symptom.name)}
                   />
                 </Badge>
               ))}
             </div>
+
+            {user && (
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <h3 className="font-medium">Profile Information Used in Analysis:</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>Age: {user.dateOfBirth ? Math.floor((new Date().getTime() - new Date(user.dateOfBirth).getTime()) / 31536000000) : 'Not provided'}</div>
+                  <div>Gender: {user.gender || 'Not provided'}</div>
+                  <div>Medical History: {user.medicalHistory?.length ? user.medicalHistory.join(", ") : 'None'}</div>
+                  <div>Family History: {user.familyHistory?.length ? user.familyHistory.join(", ") : 'None'}</div>
+                </div>
+              </div>
+            )}
 
             <Button
               className="w-full"
@@ -259,8 +330,10 @@ export default function SymptomChecker() {
                       {new Date(log.createdAt).toLocaleDateString()}
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {log.data.symptoms.map((symptom: string, j: number) => (
-                        <Badge key={j} variant="outline">{symptom}</Badge>
+                      {log.data.symptoms.map((symptom: Symptom, j: number) => (
+                        <Badge key={j} variant="outline">
+                          {symptom.name} ({symptom.severity}, {symptom.duration}, {symptom.frequency})
+                        </Badge>
                       ))}
                     </div>
                     {log.data.analysis && (
